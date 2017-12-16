@@ -253,7 +253,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
                       "dash: open failed: '%V'", &ctx->playlist_bak);
         return NGX_ERROR;
     }
-
+    //ngx_log_error(NGX_LOG_EMERG, s->connection->log, 0, "this is a test message from mengla.");
 
 #define NGX_RTMP_DASH_MANIFEST_HEADER                                          \
     "<?xml version=\"1.0\"?>\n"                                                \
@@ -378,7 +378,7 @@ ngx_rtmp_dash_write_playlist(ngx_rtmp_session_t *s)
                  tm.tm_year - 70, tm.tm_mon,
                  tm.tm_mday - 1, tm.tm_hour,
                  tm.tm_min, tm.tm_sec,
-                 (ngx_uint_t) ((depth_msec % 1000) / 10));
+                 (ngx_uint_t) ((depth_msec % 1000) / 10)) = 0;
 
     last = buffer + sizeof(buffer);
 
