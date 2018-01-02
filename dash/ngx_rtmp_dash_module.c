@@ -13,7 +13,7 @@ static ngx_rtmp_close_stream_pt         next_close_stream;
 static ngx_rtmp_stream_begin_pt         next_stream_begin;
 static ngx_rtmp_stream_eof_pt           next_stream_eof;
 
-
+static char * ngx_rtmp_dash_variant(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static ngx_int_t ngx_rtmp_dash_postconfiguration(ngx_conf_t *cf);
 static void * ngx_rtmp_dash_create_app_conf(ngx_conf_t *cf);
 static char * ngx_rtmp_dash_merge_app_conf(ngx_conf_t *cf,
@@ -32,6 +32,10 @@ typedef struct {
     uint32_t                            duration;
 } ngx_rtmp_dash_frag_t;
 
+typedef struct {
+    ngx_str_t                           suffix;
+    ngx_array_t                         args;
+} ngx_rtmp_dash_variant_t;
 
 typedef struct {
     ngx_uint_t                          id;
@@ -50,6 +54,8 @@ typedef struct {
 typedef struct {
     ngx_str_t                           playlist;
     ngx_str_t                           playlist_bak;
+    ngx_str_t                           var_playlist;
+    ngx_str_t                           var_playlist_bak;
     ngx_str_t                           name;
     ngx_str_t                           stream;
     ngx_time_t                          start_time;
@@ -69,6 +75,7 @@ typedef struct {
 
     ngx_rtmp_dash_track_t               audio;
     ngx_rtmp_dash_track_t               video;
+    ngx_rtmp_dash_variant_t             *var;
 } ngx_rtmp_dash_ctx_t;
 
 
@@ -87,6 +94,7 @@ typedef struct {
     ngx_uint_t                          winfrags;
     ngx_flag_t                          cleanup;
     ngx_path_t                         *slot;
+    ngx_array_t                        *variant;
 } ngx_rtmp_dash_app_conf_t;
 
 
@@ -132,6 +140,13 @@ static ngx_command_t ngx_rtmp_dash_commands[] = {
       ngx_conf_set_flag_slot,
       NGX_RTMP_APP_CONF_OFFSET,
       offsetof(ngx_rtmp_dash_app_conf_t, nested),
+      NULL },
+
+    { ngx_string("dash_variant"),
+      NGX_RTMP_MAIN_CONF|NGX_RTMP_SRV_CONF|NGX_RTMP_APP_CONF|NGX_CONF_1MORE,
+      ngx_rtmp_dash_variant,
+      NGX_RTMP_APP_CONF_OFFSET,
+      0,
       NULL },
 
     ngx_null_command
@@ -1174,12 +1189,15 @@ static ngx_int_t
 ngx_rtmp_dash_video(ngx_rtmp_session_t *s, ngx_rtmp_header_t *h,
     ngx_chain_t *in)
 {
+
     u_char                    *p;
     uint8_t                    ftype, htype;
     uint32_t                   delay;
     ngx_rtmp_dash_ctx_t       *ctx;
     ngx_rtmp_codec_ctx_t      *codec_ctx;
     ngx_rtmp_dash_app_conf_t  *dacf;
+
+    //ngx_log_error(NGX_LOG_EMERG, s->connection->log, 0, "step into dash_video from mengla.");
 
     dacf = ngx_rtmp_get_module_app_conf(s, ngx_rtmp_dash_module);
     ctx = ngx_rtmp_get_module_ctx(s, ngx_rtmp_dash_module);
@@ -1521,6 +1539,58 @@ ngx_rtmp_dash_merge_app_conf(ngx_conf_t *cf, void *parent, void *child)
     return NGX_CONF_OK;
 }
 
+static char *
+ngx_rtmp_dash_variant(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_rtmp_dash_app_conf_t  *dacf = conf;
+
+    ngx_str_t                *value, *arg;
+    ngx_uint_t                n;
+    ngx_rtmp_dash_variant_t   *var;
+
+    //ngx_log_error(NGX_LOG_EMERG, s->connection->log, 0, "this is a test message from mengla.");
+
+    value = cf->args->elts;
+
+    if (dacf->variant == NULL) {
+        dacf->variant = ngx_array_create(cf->pool, 1,
+                                         sizeof(ngx_rtmp_dash_variant_t));
+        if (dacf->variant == NULL) {
+            return NGX_CONF_ERROR;
+        }
+    }
+
+    var = ngx_array_push(dacf->variant);
+    if (var == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    ngx_memzero(var, sizeof(ngx_rtmp_dash_variant_t));
+
+    var->suffix = value[1];
+
+    if (cf->args->nelts == 2) {
+        return NGX_CONF_OK;
+    }
+
+    if (ngx_array_init(&var->args, cf->pool, cf->args->nelts - 2,
+                       sizeof(ngx_str_t))
+        != NGX_OK)
+    {
+        return NGX_CONF_ERROR;
+    }
+
+    arg = ngx_array_push_n(&var->args, cf->args->nelts - 2);
+    if (arg == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    for (n = 2; n < cf->args->nelts; n++) {
+        *arg++ = value[n];
+    }
+
+    return NGX_CONF_OK;
+}
 
 static ngx_int_t
 ngx_rtmp_dash_postconfiguration(ngx_conf_t *cf)
